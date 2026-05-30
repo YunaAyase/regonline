@@ -1,0 +1,60 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  mode: "debug"
+
+database:
+  driver: "sqlite"
+  path: "./data/regonline.db"
+  auto_migrate: true
+
+storage:
+  photo_dir: "./photos"
+
+classes:
+  seed_enabled: true
+  presets:
+    - name: "编程班"
+      max_students: 30
+      min_age: 7
+      max_age: 16
+    - name: "手工班"
+      max_students: 25
+      min_age: 6
+      max_age: 15
+    - name: "国画班"
+      max_students: 20
+      min_age: 8
+      max_age: 18
+    - name: "舞蹈班"
+      max_students: 25
+      min_age: 5
+      max_age: 14
+    - name: "钢琴班"
+      max_students: 15
+      min_age: 6
+      max_age: 18
+    - name: "少儿绘画1班"
+      max_students: 25
+      min_age: 5
+      max_age: 12
+    - name: "少儿绘画2班"
+      max_students: 25
+      min_age: 5
+      max_age: 12
+    - name: "动漫班"
+      max_students: 25
+      min_age: 9
+      max_age: 18
+    - name: "线描班"
+      max_students: 20
+      min_age: 7
+      max_age: 16
+    - name: "拼装班"
+      max_students: 20
+      min_age: 6
+      max_age: 14
+    - name: "书法班"
+      max_students: 25
+      min_age: 7
+      max_age: 17
