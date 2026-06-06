@@ -15,6 +15,7 @@ func SetupRouter(
 	authHandler *handler.AuthHandler,
 	settingsHandler *handler.SiteSettingHandler,
 	serverInfoHandler *handler.ServerInfoHandler,
+	serverIPHandler *handler.ServerIPHandler,
 	photoHandler *handler.PhotoHandler,
 	backupHandler *handler.BackupHandler,
 	resetDBHandler *handler.ResetDBHandler,
@@ -59,6 +60,7 @@ func SetupRouter(
 		api.PUT("/settings", settingsHandler.UpdateSettings)
 
 		api.GET("/server-info", serverInfoHandler.GetServerInfo)
+		api.GET("/server-ip", serverIPHandler.GetServerIP)
 
 		api.GET("/photos/:filename", photoHandler.ServePhoto)
 

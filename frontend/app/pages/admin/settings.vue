@@ -10,6 +10,7 @@ const config = useRuntimeConfig()
 const tabs = [
   { key: 'account', label: '管理员账号', icon: 'i-heroicons-user-circle' },
   { key: 'site', label: '网站信息', icon: 'i-heroicons-globe-alt' },
+  { key: 'ocr', label: 'OCR 云识别', icon: 'i-heroicons-camera' },
   { key: 'advanced', label: '高级设置', icon: 'i-heroicons-wrench-screwdriver' },
   { key: 'server', label: '服务器信息', icon: 'i-heroicons-server-stack' },
 ]
@@ -31,10 +32,17 @@ const siteForm = ref<SiteSettings>({
   site_description: '',
   icp_record: '',
   copyright: '',
+  ocr_provider: 'baidu',
+  ocr_api_key: '',
+  ocr_secret_key: '',
 })
 const siteSaving = ref(false)
 const siteError = ref('')
 const siteSuccess = ref('')
+
+const ocrSaving = ref(false)
+const ocrError = ref('')
+const ocrSuccess = ref('')
 
 const serverInfo = ref<ServerInfo | null>(null)
 const serverLoading = ref(false)
@@ -128,6 +136,33 @@ async function saveSiteSettings() {
   }
 }
 
+async function saveOCR() {
+  ocrError.value = ''
+  ocrSuccess.value = ''
+
+  ocrSaving.value = true
+  try {
+    const res = await $fetch<any>(`${config.public.apiBase}/settings`, {
+      method: 'PUT',
+      credentials: 'include',
+      body: {
+        ocr_provider: siteForm.value.ocr_provider,
+        ocr_api_key: siteForm.value.ocr_api_key,
+        ocr_secret_key: siteForm.value.ocr_secret_key,
+      },
+    })
+    if (res.code === 0) {
+      ocrSuccess.value = 'OCR 配置保存成功'
+    } else {
+      ocrError.value = res.message || '保存失败'
+    }
+  } catch (e: any) {
+    ocrError.value = e.data?.message || '保存失败，请检查网络'
+  } finally {
+    ocrSaving.value = false
+  }
+}
+
 const backupLoading = ref(false)
 const resetLoading = ref(false)
 const qrcodeLoading = ref(false)
@@ -137,6 +172,33 @@ const advancedMsgType = ref<'success' | 'error'>('success')
 const qrcodeUrl = ref('')
 const qrcodePreview = ref('')
 const qrcodeDownloading = ref(false)
+const serverIPLoading = ref(false)
+const serverIPType = ref('')
+
+async function fetchServerIP() {
+  serverIPLoading.value = true
+  try {
+    const res = await $fetch<any>(`${config.public.apiBase}/server-ip`, {
+      credentials: 'include',
+    })
+    if (res.code === 0 && res.data?.url) {
+      qrcodeUrl.value = res.data.url
+      const typeMap: Record<string, string> = {
+        public_ipv4: '公网 IPv4',
+        public_ipv6: '公网 IPv6',
+        private_ipv4: '内网 IPv4',
+      }
+      serverIPType.value = typeMap[res.data.ip_type] || ''
+      return true
+    }
+    return false
+  } catch {
+    console.warn('Failed to fetch server IP')
+    return false
+  } finally {
+    serverIPLoading.value = false
+  }
+}
 
 async function handleBackup() {
   backupLoading.value = true
@@ -189,9 +251,13 @@ async function handleReset() {
 
 async function generateQRCode() {
   if (!qrcodeUrl.value.trim()) {
-    advancedMsg.value = '请输入报名页面 URL'
-    advancedMsgType.value = 'error'
-    return
+    advancedMsg.value = ''
+    const ok = await fetchServerIP()
+    if (!ok || !qrcodeUrl.value.trim()) {
+      advancedMsg.value = '无法获取服务器地址，请手动输入 URL'
+      advancedMsgType.value = 'error'
+      return
+    }
   }
 
   qrcodeLoading.value = true
@@ -425,6 +491,78 @@ onMounted(() => {
           </div>
         </div>
 
+        <div v-if="activeTab === 'ocr'" class="tab-panel">
+          <div class="panel-header">
+            <h2 class="panel-title">OCR 云识别配置</h2>
+            <p class="panel-desc">配置百度云/阿里云 OCR 识别服务，用于自动识别户口本照片中的身份证号</p>
+          </div>
+
+          <div class="form-card">
+            <div class="form-group">
+              <label class="form-label">OCR 服务商</label>
+              <div class="ocr-provider-row">
+                <label class="ocr-provider-option" :class="{ 'ocr-provider-option--active': siteForm.ocr_provider === 'baidu' }">
+                  <input v-model="siteForm.ocr_provider" type="radio" value="baidu" class="sr-only" />
+                  <span class="ocr-provider-label">百度云 OCR</span>
+                  <span class="ocr-provider-desc">免费 1000次/月</span>
+                </label>
+                <label class="ocr-provider-option" :class="{ 'ocr-provider-option--active': siteForm.ocr_provider === 'alibaba' }">
+                  <input v-model="siteForm.ocr_provider" type="radio" value="alibaba" class="sr-only" />
+                  <span class="ocr-provider-label">阿里云 OCR</span>
+                  <span class="ocr-provider-desc">即将支持</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">
+                {{ siteForm.ocr_provider === 'alibaba' ? 'AccessKey ID' : 'API Key' }}
+              </label>
+              <input
+                v-model="siteForm.ocr_api_key"
+                type="password"
+                class="input-base"
+                :placeholder="siteForm.ocr_provider === 'alibaba' ? '请输入阿里云 AccessKey ID' : '请输入百度云 API Key'"
+                style="max-width: 480px;"
+              >
+              <p class="form-hint">
+                在
+                <a :href="siteForm.ocr_provider === 'alibaba' ? 'https://ram.console.aliyun.com/manage/ak' : 'https://console.bce.baidu.com/ai/#/ai/ocr/overview/index'" target="_blank" class="form-link">
+                  {{ siteForm.ocr_provider === 'alibaba' ? '阿里云 RAM 访问控制' : '百度智能云控制台' }}
+                </a>
+                中创建应用获取
+              </p>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">
+                {{ siteForm.ocr_provider === 'alibaba' ? 'AccessKey Secret' : 'Secret Key' }}
+              </label>
+              <input
+                v-model="siteForm.ocr_secret_key"
+                type="password"
+                class="input-base"
+                :placeholder="siteForm.ocr_provider === 'alibaba' ? '请输入阿里云 AccessKey Secret' : '请输入百度云 Secret Key'"
+                style="max-width: 480px;"
+              >
+            </div>
+
+            <div v-if="ocrError" class="form-message form-message--error">
+              <UIcon name="i-heroicons-exclamation-circle" class="msg-icon" />
+              {{ ocrError }}
+            </div>
+            <div v-if="ocrSuccess" class="form-message form-message--success">
+              <UIcon name="i-heroicons-check-circle" class="msg-icon" />
+              {{ ocrSuccess }}
+            </div>
+
+            <button class="btn-pill-neutral form-submit-btn" :disabled="ocrSaving" @click="saveOCR">
+              <UIcon v-if="ocrSaving" name="i-heroicons-arrow-path" class="w-3.5 h-3.5 animate-spin" />
+              保存配置
+            </button>
+          </div>
+        </div>
+
         <div v-if="activeTab === 'advanced'" class="tab-panel">
           <div class="panel-header">
             <h2 class="panel-title">高级设置</h2>
@@ -479,13 +617,17 @@ onMounted(() => {
                 <div class="qrcode-body">
                   <div class="qrcode-input-group">
                     <label class="form-label">报名页面 URL</label>
-                    <input
-                      v-model="qrcodeUrl"
-                      type="text"
-                      class="input-base"
-                      placeholder="例如：http://localhost:3000 或留空使用默认地址"
-                      style="flex: 1;"
-                    >
+                    <div class="qrcode-url-row">
+                      <input
+                        v-model="qrcodeUrl"
+                        type="text"
+                        class="input-base"
+                        placeholder="留空点击生成将自动检测服务器地址"
+                        style="flex: 1;"
+                        :disabled="serverIPLoading"
+                      >
+                      <span v-if="serverIPType" class="qrcode-ip-badge">{{ serverIPType }}</span>
+                    </div>
                     <button class="btn-pill-neutral" :disabled="qrcodeLoading" @click="generateQRCode">
                       <UIcon v-if="qrcodeLoading" name="i-heroicons-arrow-path" class="w-3.5 h-3.5 animate-spin" />
                       {{ qrcodeLoading ? '生成中...' : '生成二维码' }}
@@ -857,6 +999,29 @@ onMounted(() => {
   gap: 0.75rem;
 }
 
+.qrcode-url-row {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.qrcode-url-row .input-base {
+  flex: 1;
+}
+
+.qrcode-ip-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: #dcfce7;
+  color: #059669;
+  border: 1px solid #bbf7d0;
+}
+
 .qrcode-preview {
   display: flex;
   flex-direction: column;
@@ -932,6 +1097,79 @@ onMounted(() => {
 
 .loading-text {
   color: #cbd5e1;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.ocr-provider-row {
+  display: flex;
+  gap: 0.75rem;
+  max-width: 480px;
+}
+
+.ocr-provider-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.875rem 1rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  background: #ffffff;
+}
+
+.ocr-provider-option:hover {
+  border-color: #bfdbfe;
+  background: #f8fafc;
+}
+
+.ocr-provider-option--active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.ocr-provider-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.ocr-provider-desc {
+  font-size: 0.6875rem;
+  color: #94a3b8;
+}
+
+.ocr-provider-option--active .ocr-provider-desc {
+  color: #60a5fa;
+}
+
+.form-hint {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 0.375rem;
+}
+
+.form-link {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.form-link:hover {
+  color: #1d4ed8;
 }
 
 @media (max-width: 1024px) {

@@ -9,6 +9,7 @@ const {
   submitRegistration,
 } = useRegistration()
 const { siteSettings, siteName, fetchSiteSettings } = useSiteSettings()
+const { acquire: acquireWakeLock, release: releaseWakeLock } = useWakeLock()
 
 const config = useRuntimeConfig()
 
@@ -78,6 +79,11 @@ const classOptions = computed(() => {
 onMounted(async () => {
   await fetchClasses()
   fetchSiteSettings()
+  acquireWakeLock(config.public.apiBase as string)
+})
+
+onUnmounted(() => {
+  releaseWakeLock()
 })
 
 function startRegistration() {

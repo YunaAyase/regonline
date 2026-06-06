@@ -6,7 +6,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/server ./cmd/server
 
 FROM alpine:latest
-RUN apk add --no-cache tesseract-ocr tesseract-ocr-chi-sim
+RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 COPY --from=builder /app/server ./
 COPY config.yaml ./

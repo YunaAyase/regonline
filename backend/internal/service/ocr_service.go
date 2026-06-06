@@ -1,185 +1,242 @@
 package service
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
-	"os"
-	"os/exec"
-	"regexp"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
 
+	"regonline-backend/internal/repository"
 	"regonline-backend/internal/util"
 )
 
-type OCRService struct {
-	available bool
+type OCRProvider string
+
+const (
+	OCRProviderBaidu    OCRProvider = "baidu"
+	OCRProviderAlibaba  OCRProvider = "alibaba"
+)
+
+type OCRConfig struct {
+	Provider   string `json:"provider"`
+	APIKey     string `json:"api_key"`
+	SecretKey  string `json:"secret_key"`
 }
 
 type OCRNumberCandidate struct {
-	Value       string `json:"value"`
-	Label       string `json:"label"`
-	IsIDNumber  bool   `json:"is_id_number"`
-	Length      int    `json:"length"`
+	Value      string `json:"value"`
+	Label      string `json:"label"`
+	IsIDNumber bool   `json:"is_id_number"`
+	Length     int    `json:"length"`
 }
 
-func NewOCRService() *OCRService {
-	s := &OCRService{}
-	s.checkAvailability()
-	return s
+type OCRService struct {
+	settingRepo *repository.SiteSettingRepository
+	tokenCache  string
+	tokenExpiry time.Time
+	mu          sync.Mutex
 }
 
-func (s *OCRService) checkAvailability() {
-	s.available = false
-
-	log.Println("OCR service initialization...")
-
-	_, err := exec.LookPath("tesseract")
-	if err != nil {
-		log.Println("Tesseract not found in PATH, OCR will fall back to manual input")
-		return
+func NewOCRService(settingRepo *repository.SiteSettingRepository) *OCRService {
+	return &OCRService{
+		settingRepo: settingRepo,
 	}
-
-	log.Println("Tesseract found, OCR service available")
-	s.available = true
 }
 
 func (s *OCRService) IsAvailable() bool {
-	return s.available
+	config := s.getConfig()
+	return config.APIKey != "" && config.SecretKey != ""
 }
 
-func (s *OCRService) RecognizeIDNumber(photoData []byte) (string, error) {
-	if !s.available {
-		return "", fmt.Errorf("OCR service not available")
-	}
-
-	tmpFile, err := os.CreateTemp("", "ocr_*.png")
+func (s *OCRService) getConfig() OCRConfig {
+	settings, err := s.settingRepo.GetAll()
 	if err != nil {
-		return "", fmt.Errorf("failed to create temp file: %w", err)
+		return OCRConfig{}
 	}
-	defer os.Remove(tmpFile.Name())
-
-	if _, err := tmpFile.Write(photoData); err != nil {
-		return "", fmt.Errorf("failed to write temp file: %w", err)
+	result := make(map[string]string, len(settings))
+	for _, st := range settings {
+		result[st.Key] = st.Value
 	}
-	tmpFile.Close()
-
-	text, err := s.runTesseract(tmpFile.Name())
-	if err != nil {
-		return "", fmt.Errorf("tesseract execution failed: %w", err)
+	return OCRConfig{
+		Provider:  result["ocr_provider"],
+		APIKey:    result["ocr_api_key"],
+		SecretKey: result["ocr_secret_key"],
 	}
-
-	idNumber := s.extractIDNumber(text)
-	if idNumber == "" {
-		return "", fmt.Errorf("未识别到身份证号")
-	}
-
-	return util.NormalizeIDNumber(idNumber), nil
 }
 
 func (s *OCRService) RecognizeAllNumbers(photoData []byte) ([]OCRNumberCandidate, error) {
-	if !s.available {
-		return nil, fmt.Errorf("OCR service not available")
+	config := s.getConfig()
+	if config.APIKey == "" || config.SecretKey == "" {
+		return nil, fmt.Errorf("未配置 OCR 云识别服务，请在管理后台设置")
 	}
 
-	tmpFile, err := os.CreateTemp("", "ocr_*.png")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temp file: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	if _, err := tmpFile.Write(photoData); err != nil {
-		return nil, fmt.Errorf("failed to write temp file: %w", err)
-	}
-	tmpFile.Close()
-
-	text, err := s.runTesseract(tmpFile.Name())
-	if err != nil {
-		return nil, fmt.Errorf("tesseract execution failed: %w", err)
+	provider := OCRProvider(config.Provider)
+	if provider == "" {
+		provider = OCRProviderBaidu
 	}
 
-	return s.extractAllNumbers(text), nil
+	switch provider {
+	case OCRProviderAlibaba:
+		return s.recognizeAlibaba(photoData, config)
+	default:
+		return s.recognizeBaidu(photoData, config)
+	}
 }
 
-func (s *OCRService) runTesseract(imagePath string) (string, error) {
-	cmd := exec.Command("tesseract", imagePath, "stdout", "-l", "chi_sim+eng", "--oem", "3", "--psm", "6")
-	output, err := cmd.Output()
+func (s *OCRService) recognizeBaidu(photoData []byte, config OCRConfig) ([]OCRNumberCandidate, error) {
+	token, err := s.getBaiduToken(config)
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Tesseract exit error: %s, stderr: %s", exitErr.Error(), string(exitErr.Stderr))
+		return nil, fmt.Errorf("获取百度 OCR Token 失败: %w", err)
+	}
+
+	imageBase64 := base64.StdEncoding.EncodeToString(photoData)
+
+	apiURL := fmt.Sprintf("https://aip.baidubce.com/rest/2.0/ocr/v1/idcard?access_token=%s", token)
+
+	body := url.Values{}
+	body.Set("image", imageBase64)
+	body.Set("id_card_side", "front")
+	body.Set("detect_direction", "true")
+	body.Set("detect_risk", "false")
+
+	resp, err := http.Post(apiURL, "application/x-www-form-urlencoded", strings.NewReader(body.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("百度 OCR 请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取百度 OCR 响应失败: %w", err)
+	}
+
+	log.Printf("Baidu OCR response: %s", string(respBody))
+
+	var result struct {
+		ErrorCode int    `json:"error_code"`
+		ErrorMsg  string `json:"error_msg"`
+		WordsResult struct {
+			IDNumber struct {
+				Words string `json:"words"`
+			} `json:"公民身份号码"`
+			Name struct {
+				Words string `json:"words"`
+			} `json:"姓名"`
+			Gender struct {
+				Words string `json:"words"`
+			} `json:"性别"`
+			BirthDate struct {
+				Words string `json:"words"`
+			} `json:"出生"`
+			Address struct {
+				Words string `json:"words"`
+			} `json:"住址"`
+		} `json:"words_result"`
+		WordsResultNum int `json:"words_result_num"`
+	}
+
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("解析百度 OCR 响应失败: %w", err)
+	}
+
+	if result.ErrorCode != 0 {
+		if result.ErrorCode == 110 || result.ErrorCode == 111 {
+			s.mu.Lock()
+			s.tokenCache = ""
+			s.tokenExpiry = time.Time{}
+			s.mu.Unlock()
 		}
-		return "", fmt.Errorf("tesseract command failed: %w", err)
+		return nil, fmt.Errorf("百度 OCR 错误 [%d]: %s", result.ErrorCode, result.ErrorMsg)
 	}
-	return string(output), nil
-}
 
-func (s *OCRService) extractIDNumber(text string) string {
-	candidates := s.extractAllNumbers(text)
-	for _, c := range candidates {
-		if c.IsIDNumber {
-			return c.Value
-		}
-	}
-	return ""
-}
-
-func (s *OCRService) extractAllNumbers(text string) []OCRNumberCandidate {
 	var candidates []OCRNumberCandidate
-	seen := make(map[string]bool)
 
-	cleaned := regexp.MustCompile(`[\s\-_—–·]`).ReplaceAllString(text, "")
-	cleaned = regexp.MustCompile(`[Oo]`).ReplaceAllString(cleaned, "0")
-	cleaned = regexp.MustCompile(`[Ii]`).ReplaceAllString(cleaned, "1")
-
-	patterns := []struct {
-		regex  *regexp.Regexp
-		label  string
-		isID   bool
-	}{
-		{regexp.MustCompile(`\d{17}[\dXx]`), "身份证号", true},
-		{regexp.MustCompile(`\d{6}\d{8}\d{3}[\dXx]`), "身份证号", true},
-		{regexp.MustCompile(`(\d{4})[\-/.年](\d{1,2})[\-/.月](\d{1,2})`), "日期", false},
-		{regexp.MustCompile(`1[3-9]\d{9}`), "手机号", false},
-		{regexp.MustCompile(`\d{11,}`), "数字串", false},
-		{regexp.MustCompile(`\d{8,}`), "数字串", false},
-		{regexp.MustCompile(`\d{6,}`), "数字串", false},
+	if idNum := strings.TrimSpace(result.WordsResult.IDNumber.Words); idNum != "" {
+		normalized := util.NormalizeIDNumber(idNum)
+		candidates = append(candidates, OCRNumberCandidate{
+			Value:      normalized,
+			Label:      "身份证号",
+			IsIDNumber: true,
+			Length:     len(normalized),
+		})
 	}
 
-	for _, p := range patterns {
-		matches := p.regex.FindAllString(cleaned, -1)
-		for _, m := range matches {
-			normalized := util.NormalizeIDNumber(m)
-			if normalized == "" {
-				normalized = m
-			}
-			if len(normalized) < 4 {
-				continue
-			}
-			if seen[normalized] {
-				continue
-			}
-			seen[normalized] = true
-
-			label := p.label
-			if !p.isID {
-				switch {
-				case len(normalized) == 18:
-					label = "18位数字"
-				case len(normalized) >= 8 && len(normalized) <= 10:
-					label = "日期"
-				case len(normalized) == 11:
-					label = "11位数字"
-				default:
-					label = fmt.Sprintf("%d位数字", len(normalized))
-				}
-			}
-
-			candidates = append(candidates, OCRNumberCandidate{
-				Value:      normalized,
-				Label:      label,
-				IsIDNumber: p.isID,
-				Length:     len(normalized),
-			})
-		}
+	if birth := strings.TrimSpace(result.WordsResult.BirthDate.Words); birth != "" {
+		candidates = append(candidates, OCRNumberCandidate{
+			Value:      birth,
+			Label:      "出生日期",
+			IsIDNumber: false,
+			Length:     len(birth),
+		})
 	}
 
-	return candidates
+	if len(candidates) == 0 && result.WordsResultNum == 0 {
+		return nil, fmt.Errorf("未识别到身份证信息，请确认照片清晰且包含身份证正面")
+	}
+
+	return candidates, nil
+}
+
+func (s *OCRService) getBaiduToken(config OCRConfig) (string, error) {
+	s.mu.Lock()
+	if s.tokenCache != "" && time.Now().Before(s.tokenExpiry) {
+		token := s.tokenCache
+		s.mu.Unlock()
+		return token, nil
+	}
+	s.mu.Unlock()
+
+	authURL := fmt.Sprintf(
+		"https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=%s&client_secret=%s",
+		config.APIKey,
+		config.SecretKey,
+	)
+
+	resp, err := http.Post(authURL, "application/x-www-form-urlencoded", nil)
+	if err != nil {
+		return "", fmt.Errorf("请求百度 Token 失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("读取百度 Token 响应失败: %w", err)
+	}
+
+	var tokenResult struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
+		Error       string `json:"error"`
+		ErrorDesc   string `json:"error_description"`
+	}
+
+	if err := json.Unmarshal(respBody, &tokenResult); err != nil {
+		return "", fmt.Errorf("解析百度 Token 响应失败: %w", err)
+	}
+
+	if tokenResult.Error != "" {
+		return "", fmt.Errorf("百度 Token 错误: %s - %s", tokenResult.Error, tokenResult.ErrorDesc)
+	}
+
+	s.mu.Lock()
+	s.tokenCache = tokenResult.AccessToken
+	expireSeconds := tokenResult.ExpiresIn
+	if expireSeconds <= 0 {
+		expireSeconds = 2592000
+	}
+	s.tokenExpiry = time.Now().Add(time.Duration(expireSeconds) * time.Second).Add(-5 * time.Minute)
+	s.mu.Unlock()
+
+	log.Println("Baidu OCR access_token acquired successfully")
+	return tokenResult.AccessToken, nil
+}
+
+func (s *OCRService) recognizeAlibaba(photoData []byte, config OCRConfig) ([]OCRNumberCandidate, error) {
+	return nil, fmt.Errorf("阿里云 OCR 暂未实现，请使用百度云 OCR")
 }

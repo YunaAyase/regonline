@@ -51,6 +51,9 @@ func (r *SiteSettingRepository) SeedDefaults() error {
 		{"site_description", "在线报名管理系统"},
 		{"icp_record", ""},
 		{"copyright", "© 2025 RegOnline"},
+		{"ocr_provider", "baidu"},
+		{"ocr_api_key", ""},
+		{"ocr_secret_key", ""},
 	}
 
 	for _, d := range defaults {

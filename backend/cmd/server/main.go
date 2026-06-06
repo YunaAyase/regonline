@@ -65,7 +65,7 @@ func main() {
 
 	classService := service.NewClassService(classRepo, regRepo)
 	regService := service.NewRegistrationService(regRepo, classRepo, cfg.Storage.PhotoDir)
-	ocrService := service.NewOCRService()
+	ocrService := service.NewOCRService(settingRepo)
 
 	classHandler := handler.NewClassHandler(classService)
 	regHandler := handler.NewRegistrationHandler(regService)
@@ -78,8 +78,9 @@ func main() {
 	backupHandler := handler.NewBackupHandler(cfg.Database.Path, filepath.Dir(cfg.Database.Path)+"/backups")
 	resetDBHandler := handler.NewResetDBHandler(db, cfg.Database.Path, filepath.Dir(cfg.Database.Path)+"/backups")
 	qrcodeHandler := handler.NewQRCodeHandler(fmt.Sprintf("http://%s:%d", cfg.Server.Host, cfg.Server.Port))
+	serverIPHandler := handler.NewServerIPHandler()
 
-	r := router.SetupRouter(classHandler, regHandler, ocrHandler, statsHandler, authHandler, settingsHandler, serverInfoHandler, photoHandler, backupHandler, resetDBHandler, qrcodeHandler)
+	r := router.SetupRouter(classHandler, regHandler, ocrHandler, statsHandler, authHandler, settingsHandler, serverInfoHandler, serverIPHandler, photoHandler, backupHandler, resetDBHandler, qrcodeHandler)
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	log.Printf("Server starting at http://%s", addr)

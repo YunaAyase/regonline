@@ -23,7 +23,7 @@ type OCRResponse struct {
 }
 
 type OCRRecognizeResult struct {
-	IDNumber  string                      `json:"id_number"`
+	IDNumber   string                       `json:"id_number"`
 	Candidates []service.OCRNumberCandidate `json:"candidates,omitempty"`
 }
 
@@ -31,7 +31,7 @@ func (h *OCRHandler) RecognizeID(c *gin.Context) {
 	if !h.ocrService.IsAvailable() {
 		c.JSON(200, OCRResponse{
 			Code:    1,
-			Message: "OCR 服务不可用，请手动输入身份证号",
+			Message: "未配置 OCR 云识别服务，请在管理后台 → 网站设置 → OCR 云识别配置中配置",
 		})
 		return
 	}

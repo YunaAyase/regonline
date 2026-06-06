@@ -34,6 +34,9 @@ export interface SiteSettings {
   site_description: string
   icp_record: string
   copyright: string
+  ocr_provider: string
+  ocr_api_key: string
+  ocr_secret_key: string
 }
 
 export interface UpdateAccountRequest {
