@@ -46,7 +46,7 @@ version: '3.8'
 services:
   backend:
     build: ./backend
-    ports: ["8080:8080"]
+    ports: ["5001:5001"]
     volumes:
       - ./backend/data:/app/data
       - ./photos:/app/photos
@@ -56,9 +56,9 @@ services:
 
   frontend:
     build: ./frontend
-    ports: ["3000:3000"]
+    ports: ["5000:5000"]
     environment:
-      - NUXT_PUBLIC_API_BASE=http://backend:8080/api
+      - NUXT_PUBLIC_API_BASE=http://backend:5001/api
       - TZ=Asia/Shanghai
     depends_on: [backend]
     restart: unless-stopped
@@ -78,7 +78,7 @@ services:
 docker compose up -d
 ```
 
-访问 `http://localhost:3000` 即可使用。
+访问 `http://localhost:5000` 即可使用。
 
 停止：`docker compose down`
 查看日志：`docker compose logs -f`
@@ -99,7 +99,7 @@ cd backend && go run ./cmd/server &
 # 启动前端
 cd ../frontend && npm install && npm run dev &
 
-# 访问 http://localhost:3000
+# 访问 http://localhost:5000
 ```
 
 #### Windows
@@ -114,7 +114,7 @@ cd regonline\frontend
 npm install
 npm run dev
 
-# 访问 http://localhost:3000
+# 访问 http://localhost:5000
 ```
 
 ---
@@ -175,7 +175,7 @@ tesseract --version
 | 用户名 | `admin` |
 | 密码 | `admin` |
 
-管理页面：`http://localhost:3000/admin/login`
+管理页面：`http://localhost:5000/admin/login`
 
 > 首次登录后建议在「网站设置 → 管理员账号」中修改密码。
 
@@ -224,7 +224,7 @@ regonline/
 ## 常见问题
 
 **Q: 后端启动后前端无法连接？**
-A: 确保 `nuxt.config.ts` 中 `devProxy` 正确指向 `http://localhost:8080/api/`。
+A: 确保 `nuxt.config.ts` 中 `devProxy` 正确指向 `http://localhost:5001/api/`。
 
 **Q: 班级列表为空？**
 A: 检查 `config.yaml` 中 `classes.seed_enabled` 是否为 `true`。

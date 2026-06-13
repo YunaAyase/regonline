@@ -33,8 +33,10 @@ const siteForm = ref<SiteSettings>({
   icp_record: '',
   copyright: '',
   ocr_provider: 'baidu',
-  ocr_api_key: '',
-  ocr_secret_key: '',
+  ocr_baidu_api_key: '',
+  ocr_baidu_secret_key: '',
+  ocr_alibaba_access_key_id: '',
+  ocr_alibaba_access_key_secret: '',
 })
 const siteSaving = ref(false)
 const siteError = ref('')
@@ -142,14 +144,21 @@ async function saveOCR() {
 
   ocrSaving.value = true
   try {
+    const body: Record<string, string> = {
+      ocr_provider: siteForm.value.ocr_provider,
+    }
+    if (siteForm.value.ocr_provider === 'alibaba') {
+      body.ocr_alibaba_access_key_id = siteForm.value.ocr_alibaba_access_key_id
+      body.ocr_alibaba_access_key_secret = siteForm.value.ocr_alibaba_access_key_secret
+    } else {
+      body.ocr_baidu_api_key = siteForm.value.ocr_baidu_api_key
+      body.ocr_baidu_secret_key = siteForm.value.ocr_baidu_secret_key
+    }
+
     const res = await $fetch<any>(`${config.public.apiBase}/settings`, {
       method: 'PUT',
       credentials: 'include',
-      body: {
-        ocr_provider: siteForm.value.ocr_provider,
-        ocr_api_key: siteForm.value.ocr_api_key,
-        ocr_secret_key: siteForm.value.ocr_secret_key,
-      },
+      body,
     })
     if (res.code === 0) {
       ocrSuccess.value = 'OCR 配置保存成功'
@@ -509,43 +518,68 @@ onMounted(() => {
                 <label class="ocr-provider-option" :class="{ 'ocr-provider-option--active': siteForm.ocr_provider === 'alibaba' }">
                   <input v-model="siteForm.ocr_provider" type="radio" value="alibaba" class="sr-only" />
                   <span class="ocr-provider-label">阿里云 OCR</span>
-                  <span class="ocr-provider-desc">即将支持</span>
+                  <span class="ocr-provider-desc">免费 200次/月</span>
                 </label>
               </div>
             </div>
 
-            <div class="form-group">
-              <label class="form-label">
-                {{ siteForm.ocr_provider === 'alibaba' ? 'AccessKey ID' : 'API Key' }}
-              </label>
-              <input
-                v-model="siteForm.ocr_api_key"
-                type="password"
-                class="input-base"
-                :placeholder="siteForm.ocr_provider === 'alibaba' ? '请输入阿里云 AccessKey ID' : '请输入百度云 API Key'"
-                style="max-width: 480px;"
-              >
-              <p class="form-hint">
-                在
-                <a :href="siteForm.ocr_provider === 'alibaba' ? 'https://ram.console.aliyun.com/manage/ak' : 'https://console.bce.baidu.com/ai/#/ai/ocr/overview/index'" target="_blank" class="form-link">
-                  {{ siteForm.ocr_provider === 'alibaba' ? '阿里云 RAM 访问控制' : '百度智能云控制台' }}
-                </a>
-                中创建应用获取
-              </p>
-            </div>
+            <!-- 百度云配置 -->
+            <template v-if="siteForm.ocr_provider === 'baidu'">
+              <div class="form-group">
+                <label class="form-label">API Key</label>
+                <input
+                  v-model="siteForm.ocr_baidu_api_key"
+                  type="text"
+                  class="input-base"
+                  placeholder="请输入百度云 API Key"
+                  style="max-width: 480px;"
+                >
+                <p class="form-hint">
+                  在
+                  <a href="https://console.bce.baidu.com/ai/#/ai/ocr/overview/index" target="_blank" class="form-link">百度智能云控制台</a>
+                  中创建应用获取
+                </p>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Secret Key</label>
+                <input
+                  v-model="siteForm.ocr_baidu_secret_key"
+                  type="password"
+                  class="input-base"
+                  placeholder="请输入百度云 Secret Key"
+                  style="max-width: 480px;"
+                >
+              </div>
+            </template>
 
-            <div class="form-group">
-              <label class="form-label">
-                {{ siteForm.ocr_provider === 'alibaba' ? 'AccessKey Secret' : 'Secret Key' }}
-              </label>
-              <input
-                v-model="siteForm.ocr_secret_key"
-                type="password"
-                class="input-base"
-                :placeholder="siteForm.ocr_provider === 'alibaba' ? '请输入阿里云 AccessKey Secret' : '请输入百度云 Secret Key'"
-                style="max-width: 480px;"
-              >
-            </div>
+            <!-- 阿里云配置 -->
+            <template v-if="siteForm.ocr_provider === 'alibaba'">
+              <div class="form-group">
+                <label class="form-label">AccessKey ID</label>
+                <input
+                  v-model="siteForm.ocr_alibaba_access_key_id"
+                  type="text"
+                  class="input-base"
+                  placeholder="请输入阿里云 AccessKey ID"
+                  style="max-width: 480px;"
+                >
+                <p class="form-hint">
+                  在
+                  <a href="https://ram.console.aliyun.com/manage/ak" target="_blank" class="form-link">阿里云 RAM 访问控制</a>
+                  中创建 AccessKey 获取
+                </p>
+              </div>
+              <div class="form-group">
+                <label class="form-label">AccessKey Secret</label>
+                <input
+                  v-model="siteForm.ocr_alibaba_access_key_secret"
+                  type="password"
+                  class="input-base"
+                  placeholder="请输入阿里云 AccessKey Secret"
+                  style="max-width: 480px;"
+                >
+              </div>
+            </template>
 
             <div v-if="ocrError" class="form-message form-message--error">
               <UIcon name="i-heroicons-exclamation-circle" class="msg-icon" />

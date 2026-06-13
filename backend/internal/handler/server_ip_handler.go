@@ -39,7 +39,7 @@ var publicIPServices = []string{
 
 func (h *ServerIPHandler) GetServerIP(c *gin.Context) {
 	result := ServerIPResponse{
-		Port: 3000,
+		Port: 5000,
 	}
 
 	publicIP := detectPublicIP()

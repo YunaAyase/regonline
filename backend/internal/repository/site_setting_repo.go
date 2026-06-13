@@ -52,8 +52,10 @@ func (r *SiteSettingRepository) SeedDefaults() error {
 		{"icp_record", ""},
 		{"copyright", "© 2025 RegOnline"},
 		{"ocr_provider", "baidu"},
-		{"ocr_api_key", ""},
-		{"ocr_secret_key", ""},
+		{"ocr_baidu_api_key", ""},
+		{"ocr_baidu_secret_key", ""},
+		{"ocr_alibaba_access_key_id", ""},
+		{"ocr_alibaba_access_key_secret", ""},
 	}
 
 	for _, d := range defaults {

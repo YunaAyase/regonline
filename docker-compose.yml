@@ -2,7 +2,7 @@ version: '3.8'
 services:
   backend:
     build: ./backend
-    ports: ["8080:8080"]
+    ports: ["5001:5001"]
     volumes:
       - ./backend/data:/app/data
       - ./photos:/app/photos
@@ -12,9 +12,9 @@ services:
 
   frontend:
     build: ./frontend
-    ports: ["3000:3000"]
+    ports: ["5000:5000"]
     environment:
-      - NUXT_PUBLIC_API_BASE=http://backend:8080/api
+      - NUXT_PUBLIC_API_BASE=http://backend:5001/api
       - TZ=Asia/Shanghai
     depends_on: [backend]
     restart: unless-stopped

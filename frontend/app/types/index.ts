@@ -35,8 +35,10 @@ export interface SiteSettings {
   icp_record: string
   copyright: string
   ocr_provider: string
-  ocr_api_key: string
-  ocr_secret_key: string
+  ocr_baidu_api_key: string
+  ocr_baidu_secret_key: string
+  ocr_alibaba_access_key_id: string
+  ocr_alibaba_access_key_secret: string
 }
 
 export interface UpdateAccountRequest {

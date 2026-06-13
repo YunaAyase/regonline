@@ -32,13 +32,17 @@ func (h *SiteSettingHandler) UpdateSettings(c *gin.Context) {
 	}
 
 	allowedKeys := map[string]bool{
-		"site_name":        true,
-		"site_description": true,
-		"icp_record":        true,
-		"copyright":         true,
-		"ocr_provider":      true,
-		"ocr_api_key":       true,
-		"ocr_secret_key":    true,
+		"site_name":                     true,
+		"site_description":              true,
+		"icp_record":                    true,
+		"copyright":                     true,
+		"ocr_provider":                  true,
+		"ocr_baidu_api_key":             true,
+		"ocr_baidu_secret_key":          true,
+		"ocr_alibaba_access_key_id":     true,
+		"ocr_alibaba_access_key_secret": true,
+		"ocr_api_key":                   true,
+		"ocr_secret_key":                true,
 	}
 
 	for key := range updates {

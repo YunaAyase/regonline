@@ -11,5 +11,5 @@ WORKDIR /app
 COPY --from=builder /app/server ./
 COPY config.yaml ./
 RUN mkdir -p /app/data /app/photos
-EXPOSE 8080
+EXPOSE 5001
 CMD ["/app/server"]

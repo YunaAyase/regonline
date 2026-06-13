@@ -10,6 +10,6 @@ WORKDIR /app
 COPY --from=builder /build/.output ./.output
 COPY --from=builder /build/package*.json ./
 RUN npm ci --omit=dev
-ENV HOST=0.0.0.0 PORT=3000
-EXPOSE 3000
+ENV HOST=0.0.0.0 PORT=5000
+EXPOSE 5000
 CMD ["node", ".output/server/index.mjs"]

@@ -50,7 +50,7 @@ func Load(configPath string) (*Config, error) {
 	v.SetConfigType("yaml")
 
 	v.SetDefault("server.host", "0.0.0.0")
-	v.SetDefault("server.port", 8080)
+	v.SetDefault("server.port", 5001)
 	v.SetDefault("server.mode", "debug")
 	v.SetDefault("database.driver", "sqlite")
 	v.SetDefault("database.path", "./data/regonline.db")
